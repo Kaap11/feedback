@@ -213,14 +213,13 @@
 
         <!-- API Keys Section -->
         <div class="section">
-            <h2>API Keys</h2>
+            <h2>Setup</h2>
             <div class="input-group">
-                <label>OpenAI API Key (voor Whisper transcriptie):</label>
+                <label>OpenAI API Key (voor transcriptie én feedback):</label>
                 <input type="password" id="openaiKey" placeholder="sk-proj-... of sk-...">
-            </div>
-            <div class="input-group">
-                <label>Claude API Key (voor feedback analyse):</label>
-                <input type="password" id="claudeKey" placeholder="sk-ant-...">
+                <div class="info-box" style="margin-top: 5px;">
+                    ℹ️ Deze key wordt gebruikt voor zowel Whisper transcriptie als ChatGPT feedback analyse
+                </div>
             </div>
         </div>
 
@@ -263,11 +262,11 @@
                 <div class="analysis-options">
                     <div class="analysis-type selected" id="recruitmentAnalysis">
                         <h3>🎯 Recruitment Feedback</h3>
-                        <p>KAAP11 methodiek voor recruiter gesprekken</p>
+                        <p>KAAP11 methodiek voor recruiter gesprekken (via ChatGPT)</p>
                     </div>
                     <div class="analysis-type" id="customAnalysis">
                         <h3>⚙️ Custom Feedback</h3>
-                        <p>Eigen instructies</p>
+                        <p>Eigen instructies (via ChatGPT)</p>
                     </div>
                 </div>
             </div>
@@ -435,10 +434,8 @@ Begin elke feedback met:
         
         function loadSavedKeys() {
             const openaiKey = localStorage.getItem('openai_api_key');
-            const claudeKey = localStorage.getItem('claude_api_key');
             
             if (openaiKey) document.getElementById('openaiKey').value = openaiKey;
-            if (claudeKey) document.getElementById('claudeKey').value = claudeKey;
             
             validateInputs();
         }
@@ -446,7 +443,6 @@ Begin elke feedback met:
         function setupEventListeners() {
             // Input validation
             document.getElementById('openaiKey').addEventListener('input', validateInputs);
-            document.getElementById('claudeKey').addEventListener('input', validateInputs);
             document.getElementById('audioFile').addEventListener('change', handleFileUpload);
             
             // Main actions
@@ -468,10 +464,9 @@ Begin elke feedback met:
         
         function validateInputs() {
             const openaiKey = document.getElementById('openaiKey').value;
-            const claudeKey = document.getElementById('claudeKey').value;
             const hasAudio = audioData !== null;
             
-            document.getElementById('transcribeBtn').disabled = !openaiKey || !claudeKey || !hasAudio;
+            document.getElementById('transcribeBtn').disabled = !openaiKey || !hasAudio;
         }
         
         function validateFeedbackGeneration() {
@@ -570,7 +565,6 @@ Begin elke feedback met:
                 
                 // Save API key
                 localStorage.setItem('openai_api_key', openaiKey);
-                localStorage.setItem('claude_api_key', document.getElementById('claudeKey').value);
                 
                 // Validate feedback generation
                 validateFeedbackGeneration();
@@ -616,10 +610,10 @@ Begin elke feedback met:
         }
         
         async function generateFeedback() {
-            const claudeKey = document.getElementById('claudeKey').value;
+            const openaiKey = document.getElementById('openaiKey').value;
             const transcription = document.getElementById('transcriptionResult').value.trim();
             
-            if (!claudeKey || !transcription) return;
+            if (!openaiKey || !transcription) return;
             
             // Get instruction
             let instruction = '';
@@ -638,7 +632,7 @@ Begin elke feedback met:
             // Update UI
             setButtonState('generateFeedbackBtn', true);
             showFeedbackProgress(25);
-            showFeedbackStatus('🤖 Claude analyseert het gesprek...', 'success');
+            showFeedbackStatus('🤖 ChatGPT analyseert het gesprek...', 'success');
             
             try {
                 const prompt = `${instruction}
@@ -653,23 +647,23 @@ Geef je gedetailleerde analyse en feedback volgens de bovenstaande instructies.`
                 
                 showFeedbackProgress(50);
                 
-                // Make Claude API call
-                const response = await fetch('https://api.anthropic.com/v1/messages', {
+                // Make ChatGPT API call
+                const response = await fetch('https://api.openai.com/v1/chat/completions', {
                     method: 'POST',
                     headers: {
-                        'x-api-key': claudeKey,
-                        'Content-Type': 'application/json',
-                        'anthropic-version': '2023-06-01'
+                        'Authorization': `Bearer ${openaiKey}`,
+                        'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({
-                        model: 'claude-3-5-sonnet-20241022',
-                        max_tokens: 4000,
+                        model: 'gpt-4',
                         messages: [
                             { 
                                 role: 'user', 
                                 content: prompt 
                             }
-                        ]
+                        ],
+                        max_tokens: 4000,
+                        temperature: 0.3
                     })
                 });
                 
@@ -677,17 +671,17 @@ Geef je gedetailleerde analyse en feedback volgens de bovenstaande instructies.`
                 
                 if (!response.ok) {
                     const errorText = await response.text();
-                    console.error('Claude API Error:', errorText);
-                    throw new Error(`Claude API error (${response.status}): ${errorText}`);
+                    console.error('ChatGPT API Error:', errorText);
+                    throw new Error(`ChatGPT API error (${response.status}): ${errorText}`);
                 }
                 
                 const result = await response.json();
                 
-                if (!result.content || !result.content[0] || !result.content[0].text) {
-                    throw new Error('Geen feedback ontvangen van Claude');
+                if (!result.choices || !result.choices[0] || !result.choices[0].message || !result.choices[0].message.content) {
+                    throw new Error('Geen feedback ontvangen van ChatGPT');
                 }
                 
-                const feedback = result.content[0].text;
+                const feedback = result.choices[0].message.content;
                 
                 // Show results
                 document.getElementById('feedbackResult').value = feedback;
